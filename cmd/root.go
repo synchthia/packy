@@ -39,10 +39,6 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.packy.yaml)")
-
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
 	// Add subcommands
 	rootCmd.AddCommand(ListCommand())
 	rootCmd.AddCommand(FetchCommand())
