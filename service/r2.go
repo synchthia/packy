@@ -111,27 +111,38 @@ func (r2 *R2Client) List(namespace string) ([]*models.Content, error) {
 	return files, nil
 }
 
-func (r2 *R2Client) Fetch(namespace string, contents []*models.Content) error {
+func (r2 *R2Client) Fetch(contents []*models.Content) error {
 	client, err := r2.getClient()
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("[%s] fetching %d files...\n", namespace, len(contents))
+	// キャッシュにあるけど、R2に存在していないファイルならそのファイルは削除する
+	for cachedFileName := range r2.cacheSvc.Cache.Files {
+		if !isExists(cachedFileName, contents) {
+			if _, err := os.Stat(r2.directory + "/" + cachedFileName); os.IsNotExist(err) {
+				continue
+			}
+			fmt.Printf("!! Removed: %s\n", cachedFileName)
+			if err := os.Remove(r2.directory + "/" + cachedFileName); err != nil {
+				return err
+			} else {
+				delete(r2.cacheSvc.Cache.Files, cachedFileName)
+			}
+		}
+	}
 
+	fmt.Printf("==> Fetching %d files...\n", len(contents))
 	for _, content := range contents {
 		cacheEntry := r2.cacheSvc.Cache.Files[content.Name]
-
 		if cacheEntry == nil {
 			r2.cacheSvc.Cache.Files[content.Name] = &CachedFile{
 				Hash: content.Hash,
 			}
-			if err := r2.cacheSvc.Save(); err != nil {
-				return err
-			}
 		} else {
+			// ハッシュが同一な場合はスキップ
 			if cacheEntry.Hash == content.Hash {
-				fmt.Printf("[%s] !! Skipped: %s\n", namespace, content.Name)
+				fmt.Printf("!! Skipped: %s\n", content.Path)
 				continue
 			}
 		}
@@ -154,15 +165,29 @@ func (r2 *R2Client) Fetch(namespace string, contents []*models.Content) error {
 
 		_, err = file.ReadFrom(f.Body)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		_, err = file.Write(buf.Bytes())
 		if err != nil {
 			return err
 		}
-		fmt.Printf("[%s] :: Downloaded: %s\n", namespace, content.Name)
+		fmt.Printf(":: Downloaded: %s\n", content.Path)
+	}
+
+	if err := r2.cacheSvc.Save(); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func isExists(fileName string, contents []*models.Content) bool {
+	for _, content := range contents {
+		if content.Name == fileName {
+			return true
+		}
+	}
+
+	return false
 }

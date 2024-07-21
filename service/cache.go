@@ -15,7 +15,7 @@ type CachedFile struct {
 	Hash string `json:"hash"`
 }
 
-const fileName = "cache.json"
+const fileName = "packy-cache.json"
 
 func InitCache(filePath string) (*CacheService, error) {
 	cache := &Cache{}

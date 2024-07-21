@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/synchthia/packy/models"
 	"github.com/synchthia/packy/service"
 )
 
@@ -18,15 +19,18 @@ func FetchCommand() *cobra.Command {
 			}
 
 			r2 := service.InitR2FromEnv(dir, cacheSvc)
+			var allContents []*models.Content
 			for _, server := range servers {
 				contents, err := r2.List(server)
 				if err != nil {
 					panic(err)
 				}
 
-				if err := r2.Fetch(server, contents); err != nil {
-					panic(err)
-				}
+				allContents = append(allContents, contents...)
+			}
+
+			if err := r2.Fetch(allContents); err != nil {
+				panic(err)
 			}
 		},
 	}
