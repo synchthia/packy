@@ -27,7 +27,7 @@ func ListCommand() *cobra.Command {
 				}
 
 				for _, content := range contents {
-					fmt.Printf("[%s] %s (%s)\n", content.Hash, content.Name, content.Path)
+					fmt.Printf("[%s] %s (%s) (%s)\n", content.Hash, content.Name, content.Path, content.LocalPath)
 				}
 			}
 		},

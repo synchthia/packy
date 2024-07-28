@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -103,6 +104,20 @@ func (r2 *R2Client) List(namespace string) ([]*models.Content, error) {
 				value := strings.Split(*object.Key, "/")
 				return value[len(value)-1]
 			}(),
+			LocalPath: func() string {
+				paths := strings.Split(*object.Key, "/")
+				path := ""
+				for i, s := range paths {
+					if i >= 1 {
+						if paths[len(paths)-1] != s {
+							path += s + "/"
+						} else {
+							path += s
+						}
+					}
+				}
+				return path
+			}(),
 			Path: *object.Key,
 			Hash: *object.ETag,
 		})
@@ -134,16 +149,19 @@ func (r2 *R2Client) Fetch(contents []*models.Content) error {
 
 	fmt.Printf("==> Fetching %d files...\n", len(contents))
 	for _, content := range contents {
-		cacheEntry := r2.cacheSvc.Cache.Files[content.Name]
-		if cacheEntry == nil {
-			r2.cacheSvc.Cache.Files[content.Name] = &CachedFile{
-				Hash: content.Hash,
-			}
-		} else {
+		cacheEntry := r2.cacheSvc.Cache.Files[content.LocalPath]
+		if cacheEntry != nil {
 			// ハッシュが同一な場合はスキップ
 			if cacheEntry.Hash == content.Hash {
-				fmt.Printf("!! Skipped: %s\n", content.Path)
+				fmt.Printf("!! Skipped: %s\n", content.LocalPath)
 				continue
+			}
+		}
+
+		baseDir := filepath.Dir(content.LocalPath)
+		if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+			if mkDirErr := os.MkdirAll(baseDir, 0755); mkDirErr != nil {
+				return mkDirErr
 			}
 		}
 
@@ -158,7 +176,7 @@ func (r2 *R2Client) Fetch(contents []*models.Content) error {
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(f.Body)
 
-		file, err := os.Create(r2.directory + "/" + content.Name)
+		file, err := os.Create(r2.directory + "/" + content.LocalPath)
 		if err != nil {
 			return err
 		}
@@ -172,7 +190,11 @@ func (r2 *R2Client) Fetch(contents []*models.Content) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf(":: Downloaded: %s\n", content.Path)
+		fmt.Printf(":: Downloaded: %s\n", content.LocalPath)
+
+		r2.cacheSvc.Cache.Files[content.LocalPath] = &CachedFile{
+			Hash: content.Hash,
+		}
 	}
 
 	if err := r2.cacheSvc.Save(); err != nil {
@@ -184,7 +206,7 @@ func (r2 *R2Client) Fetch(contents []*models.Content) error {
 
 func isExists(fileName string, contents []*models.Content) bool {
 	for _, content := range contents {
-		if content.Name == fileName {
+		if content.LocalPath == fileName {
 			return true
 		}
 	}
